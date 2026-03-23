@@ -319,6 +319,79 @@ class NeuralNetwork {
     return outFile.good();
   }
 
+  bool load(const std::string& filepath) {
+    std::ifstream inputFile(filepath, std::ios::binary);
+    if (!inputFile.is_open()) {
+      std::cout << filepath << " could not be opened" << std::endl;
+      return false;
+    }
+
+    size_t arch_size = 0;
+    if (!inputFile.read(reinterpret_cast<char*>(&arch_size), sizeof(arch_size)) ||
+        arch_size == 0) {
+      return false;
+    }
+
+    std::vector<size_t> loaded_arch(arch_size);
+    if (!inputFile.read(reinterpret_cast<char*>(loaded_arch.data()),
+                        loaded_arch.size() * sizeof(size_t))) {
+      return false;
+    }
+
+    std::vector<Matrix> loaded_ws;
+    std::vector<Matrix> loaded_bs;
+    std::vector<Matrix> loaded_as;
+    std::vector<Matrix> loaded_zs;
+
+    loaded_as.emplace_back(1, loaded_arch[0]);
+    for (size_t i = 1; i < loaded_arch.size(); ++i) {
+      loaded_ws.emplace_back(loaded_arch[i - 1], loaded_arch[i]);
+      loaded_bs.emplace_back(1, loaded_arch[i]);
+      loaded_as.emplace_back(1, loaded_arch[i]);
+      loaded_zs.emplace_back(1, loaded_arch[i]);
+    }
+
+    for (auto& w : loaded_ws) {
+      size_t rows = 0;
+      size_t cols = 0;
+      if (!inputFile.read(reinterpret_cast<char*>(&rows), sizeof(rows)) ||
+          !inputFile.read(reinterpret_cast<char*>(&cols), sizeof(cols))) {
+        return false;
+      }
+      if (rows != w.rows || cols != w.cols) {
+        return false;
+      }
+      if (!inputFile.read(reinterpret_cast<char*>(w.data.data()),
+                          w.data.size() * sizeof(float))) {
+        return false;
+      }
+    }
+
+    for (auto& b : loaded_bs) {
+      size_t rows = 0;
+      size_t cols = 0;
+      if (!inputFile.read(reinterpret_cast<char*>(&rows), sizeof(rows)) ||
+          !inputFile.read(reinterpret_cast<char*>(&cols), sizeof(cols))) {
+        return false;
+      }
+      if (rows != b.rows || cols != b.cols) {
+        return false;
+      }
+      if (!inputFile.read(reinterpret_cast<char*>(b.data.data()),
+                          b.data.size() * sizeof(float))) {
+        return false;
+      }
+    }
+
+    arch = std::move(loaded_arch);
+    ws = std::move(loaded_ws);
+    bs = std::move(loaded_bs);
+    as = std::move(loaded_as);
+    zs = std::move(loaded_zs);
+
+    return true;
+  }
+
   void print(const std::string& name = "nn") const {
     std::cout << name << " = [\n";
     for (size_t i = 0; i < ws.size(); ++i) {
