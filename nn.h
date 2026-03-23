@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+#include <fstream>
+
 #ifndef NN_RELU_PARAM
 #define NN_RELU_PARAM 0.01f
 #endif
@@ -158,7 +160,6 @@ class Matrix {
     return *this;
   }
 
-  // TODO: Matrix Inverse
   Matrix inverse() const {
     if (rows != cols || rows == 0) {
       return Matrix();
@@ -285,6 +286,39 @@ class NeuralNetwork {
       b.randomize(low, high);
     }
   }
+
+  bool save(const std::string& filepath) const {
+    std::ofstream outFile(filepath, std::ios::binary);
+    if (!outFile.is_open()) {
+      std::cout << filepath << " wasnt created some error" << std::endl;
+      return false;
+    }
+
+    size_t arch_size = arch.size();
+
+    outFile.write(reinterpret_cast<const char*>(&arch_size), sizeof(arch_size));
+
+    outFile.write(reinterpret_cast<const char*>(arch.data()),
+                  arch.size() * sizeof(size_t));
+
+    for (const auto& w : ws) {
+      outFile.write(reinterpret_cast<const char*>(&w.rows), sizeof(w.rows));
+      outFile.write(reinterpret_cast<const char*>(&w.cols), sizeof(w.cols));
+      outFile.write(reinterpret_cast<const char*>(w.data.data()),
+                    w.data.size() * sizeof(float));
+    }
+
+    for (const auto& b : bs) {
+      outFile.write(reinterpret_cast<const char*>(&b.rows), sizeof(b.rows));
+      outFile.write(reinterpret_cast<const char*>(&b.cols), sizeof(b.cols));
+      outFile.write(reinterpret_cast<const char*>(b.data.data()),
+                    b.data.size() * sizeof(float));
+    }
+
+    outFile.close();
+    return outFile.good();
+  }
+
   void print(const std::string& name = "nn") const {
     std::cout << name << " = [\n";
     for (size_t i = 0; i < ws.size(); ++i) {
