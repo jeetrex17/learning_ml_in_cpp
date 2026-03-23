@@ -401,17 +401,21 @@ class NeuralNetwork {
     std::cout << "]\n";
   }
 
-  void forward(Activation act = NN_ACT) {
+  void forward(Activation hidden_act = NN_ACT,
+               Activation output_act = Activation::Sigmoid) {
     for (size_t i = 0; i < ws.size(); i++) {
       as[i + 1] =
           Matrix::dot(as[i], ws[i]);  // matrix multiplicaton of weight and as
       as[i + 1] += bs[i];
       zs[i] = as[i + 1];  // save pre-activation values for backprop
-      as[i + 1].apply_activation(act);
+      Activation layer_act =
+          (i == ws.size() - 1) ? output_act : hidden_act;
+      as[i + 1].apply_activation(layer_act);
     }
   }
 
-  float cost(const Matrix& t) {
+  float cost(const Matrix& t, Activation hidden_act = NN_ACT,
+             Activation output_act = Activation::Sigmoid) {
     assert(get_input().cols + get_output().cols == t.cols);
     float c = 0.0f;
     size_t n = t.rows;
@@ -421,7 +425,7 @@ class NeuralNetwork {
       Matrix true_vals = t.slice_row(i, get_input().cols, get_output().cols);
 
       get_input() = inputs;
-      forward();
+      forward(hidden_act, output_act);
 
       for (size_t j = 0; j < true_vals.cols; ++j) {
         float d = get_output()(0, j) - true_vals(0, j);
@@ -431,7 +435,8 @@ class NeuralNetwork {
     return c / n;
   }
 
-  NeuralNetwork backprop(const Matrix& t) {
+  NeuralNetwork backprop(const Matrix& t, Activation hidden_act = NN_ACT,
+                         Activation output_act = Activation::Sigmoid) {
     size_t n = t.rows;
     assert(get_input().cols + get_output().cols == t.cols);
 
@@ -445,7 +450,7 @@ class NeuralNetwork {
 
       get_input() = in;
 
-      forward();
+      forward(hidden_act, output_act);
 
       for (auto& a : g.as) {
         a.fill(0.0f);
@@ -470,7 +475,9 @@ class NeuralNetwork {
           float a = as[l](0, j);
           float da = g.as[l](0, j);
           float z = zs[l - 1](0, j);  // pre-activation value
-          float qa = Dactf(a, z, NN_ACT);
+          Activation layer_act =
+              (l == arch.size() - 1) ? output_act : hidden_act;
+          float qa = Dactf(a, z, layer_act);
 
           g.bs[l - 1](0, j) += s * da * qa;
 
@@ -514,7 +521,8 @@ struct Batch {
   bool finished = false;
 
   void process(size_t batch_size, NeuralNetwork& nn, const Matrix& t,
-               float rate) {
+               float rate, Activation hidden_act = NN_ACT,
+               Activation output_act = Activation::Sigmoid) {
     if (finished) {
       finished = false;
       begin = 0;
@@ -536,9 +544,9 @@ struct Batch {
       }
     }
 
-    NeuralNetwork g = nn.backprop(batch_t);
+    NeuralNetwork g = nn.backprop(batch_t, hidden_act, output_act);
     nn.learn(g, rate);
-    cost += nn.cost(batch_t);
+    cost += nn.cost(batch_t, hidden_act, output_act);
     begin += batch_size;
 
     if (begin >= t.rows) {

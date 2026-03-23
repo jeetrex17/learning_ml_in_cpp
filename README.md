@@ -54,7 +54,7 @@ g++ -std=c++20 -O2 demo/xor_nn.cpp -o demo_xor && ./demo_xor
   - Key helpers: `dot(a, b)`, `slice_row(...)`, `apply_activation(...)`
 - `nn::NeuralNetwork`
   - Create with an architecture like `{2, 4, 1}` (input → hidden → output)
-  - Key methods: `randomize(low, high)`, `forward()`, `cost(train)`, `backprop(train)`, `learn(gradients, rate)`
+  - Key methods: `randomize(low, high)`, `forward(hidden_act, output_act)`, `cost(train, hidden_act, output_act)`, `backprop(train, hidden_act, output_act)`, `learn(gradients, rate)`
 - `nn::Batch`
   - Mini-batch stepping helper: repeatedly call `process(...)` until `finished == true`
 
@@ -81,7 +81,7 @@ int main() {
 
   net.get_input()(0, 0) = 0.0f;
   net.get_input()(0, 1) = 1.0f;
-  net.forward(); // uses the default activation (see NN_ACT)
+  net.forward(); // hidden layers use NN_ACT, output layer uses Sigmoid
 
   float y = net.get_output()(0, 0);
   (void)y;
@@ -94,6 +94,9 @@ int main() {
 // train: rows = samples, cols = input_dim + output_dim
 nn::NeuralNetwork grad = net.backprop(train);
 net.learn(grad, /*learning_rate=*/0.1f);
+
+// Example: Relu hidden layers with Sigmoid output
+net.forward(nn::Activation::Relu, nn::Activation::Sigmoid);
 ```
 
 ## Configuration (macros)
@@ -101,7 +104,7 @@ net.learn(grad, /*learning_rate=*/0.1f);
 These are compile-time switches (define them before including `nn.h`, or pass `-D...` to the compiler):
 
 - `NN_ACT`
-  - Sets the default activation used by `forward()` and training/backprop.
+  - Sets the default activation used by hidden layers in `forward()` and training/backprop.
   - Example: `-DNN_ACT=nn::Activation::Relu`
 - `NN_RELU_PARAM`
   - Used as the “leaky” slope in the ReLU derivative branch.
