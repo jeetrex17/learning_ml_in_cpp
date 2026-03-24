@@ -6,13 +6,13 @@
 #include <cmath>
 #include <cstddef>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <random>
 #include <ranges>
+#include <thread>
 #include <utility>
 #include <vector>
-
-#include <fstream>
 
 #ifndef NN_RELU_PARAM
 #define NN_RELU_PARAM 0.01f
@@ -27,7 +27,7 @@ enum class Activation { Sigmoid, Relu, Tanh, Sin };
 
 inline float Sigmoid(float x) { return (1 / (1 + exp(-x))); }
 inline float Relu(float x) { return std::max(0.0f, x); }
-inline float Tanh(float x) { return std::tanh(x) ; }
+inline float Tanh(float x) { return std::tanh(x); }
 inline float Sin(float x) { return std::sin(x); }
 
 // Activation Function
@@ -132,8 +132,44 @@ class Matrix {
     }
     return dst;
   }
-  // TODO: Multi-threaded Dot Product
+
   //  A faster version of dot() that uses std::thread
+  static Matrix dot_mt(const Matrix& a, const Matrix& b) {
+    assert(a.cols == b.rows);
+    Matrix dst(a.rows, b.cols, 0.0f);
+
+    unsigned int num_threads = std::thread::hardware_concurrency();
+    if (num_threads == 0) num_threads = 4;  // Fallback just in case
+
+    std::vector<std::thread> threads;
+
+    size_t chunk_size = (dst.rows + num_threads - 1) / num_threads;
+
+    for (unsigned int t = 0; t < num_threads; ++t) {
+      size_t start_row = t * chunk_size;
+      size_t end_row = std::min(start_row + chunk_size, dst.rows);
+
+      if (start_row >= dst.rows) break;
+
+      threads.emplace_back([start_row, end_row, &a, &b, &dst]() {
+        for (size_t i = start_row; i < end_row; ++i) {
+          //Loop order i -> k -> j is highly optimized for CPU Cache
+          for (size_t k = 0; k < a.cols; ++k) {
+            float a_ik = a(i, k);
+            for (size_t j = 0; j < dst.cols; ++j) {
+              dst(i, j) += a_ik * b(k, j);
+            }
+          }
+        }
+      });
+    }
+
+    for (auto& th : threads) {
+      th.join();
+    }
+
+    return dst;
+  }
 
   // row index , start col idx and how many next cols u want is that nums_cols
   Matrix slice_row(size_t row_idx, size_t start_col, size_t num_cols) const {
@@ -327,7 +363,8 @@ class NeuralNetwork {
     }
 
     size_t arch_size = 0;
-    if (!inputFile.read(reinterpret_cast<char*>(&arch_size), sizeof(arch_size)) ||
+    if (!inputFile.read(reinterpret_cast<char*>(&arch_size),
+                        sizeof(arch_size)) ||
         arch_size == 0) {
       return false;
     }
@@ -405,11 +442,10 @@ class NeuralNetwork {
                Activation output_act = Activation::Sigmoid) {
     for (size_t i = 0; i < ws.size(); i++) {
       as[i + 1] =
-          Matrix::dot(as[i], ws[i]);  // matrix multiplicaton of weight and as
+          Matrix::dot_mt(as[i], ws[i]);  // matrix multiplicaton of weight and as
       as[i + 1] += bs[i];
       zs[i] = as[i + 1];  // save pre-activation values for backprop
-      Activation layer_act =
-          (i == ws.size() - 1) ? output_act : hidden_act;
+      Activation layer_act = (i == ws.size() - 1) ? output_act : hidden_act;
       as[i + 1].apply_activation(layer_act);
     }
   }
