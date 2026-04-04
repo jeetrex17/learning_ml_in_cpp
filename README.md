@@ -115,5 +115,5 @@ These are compile-time switches (define them before including `nn.h`, or pass `-
 ## TODO
 
 - [ ] Scalar multiplication for `Matrix`
-- [ ] Multi-threaded dot product
-- [ ] Matrix transpose / inverse 
+- [X] Multi-threaded dot product
+- [X] Matrix transpose / inverse 
